@@ -29,6 +29,13 @@ class YTDLService:
             'js_runtimes': js_runtimes,
         }
 
+        # Giả lập TLS fingerprint của Google Chrome thật để vượt qua bot check trên datacenter
+        try:
+            from yt_dlp.networking.impersonate import ImpersonateTarget
+            ydl_opts['impersonate'] = ImpersonateTarget.from_str('chrome')
+        except Exception:
+            pass
+
         # Monkeypatch để yt-dlp cho phép gửi cookies với visionos và android_vr
         # Bỏ qua bot check và tránh bị chặn IP 429 trên server Render
         try:
