@@ -56,9 +56,15 @@ def trigger_update():
 @app.get("/api/version")
 def check_version():
     import yt_dlp, shutil
+    try:
+        import curl_cffi
+        cffi_ver = curl_cffi.__version__
+    except Exception as e:
+        cffi_ver = f"Error: {e}"
     return {
         "yt_dlp_version": yt_dlp.version.__version__,
-        "node_path": shutil.which("node") or shutil.which("nodejs")
+        "node_path": shutil.which("node") or shutil.which("nodejs"),
+        "curl_cffi": cffi_ver
     }
 
 @app.get("/api/audio")
