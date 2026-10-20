@@ -29,6 +29,16 @@ class YTDLService:
             'js_runtimes': js_runtimes,
         }
 
+        # Monkeypatch để yt-dlp cho phép gửi cookies với visionos và android_vr
+        # Bỏ qua bot check và tránh bị chặn IP 429 trên server Render
+        try:
+            from yt_dlp.extractor.youtube._video import INNERTUBE_CLIENTS
+            INNERTUBE_CLIENTS['visionos']['SUPPORTS_COOKIES'] = True
+            INNERTUBE_CLIENTS['android_vr']['SUPPORTS_COOKIES'] = True
+            INNERTUBE_CLIENTS['android']['SUPPORTS_COOKIES'] = True
+        except Exception:
+            pass
+
         # Nạp cookies từ biến môi trường YOUTUBE_COOKIES hoặc file cookies.txt nếu có
         raw_cookies = os.getenv("YOUTUBE_COOKIES")
         cookie_file = None
@@ -43,39 +53,40 @@ class YTDLService:
 
         info = None
         errors = []
-        # Lượt 1 (Ưu tiên): Dùng client android + visionos + android_vr không cần cookie
-        # (Miễn nhiễm với bot check và không bị ảnh hưởng bởi cookie hết hạn)
-        try:
-            opts_direct = {
-                **ydl_opts,
-                'extractor_args': {
-                    'youtube': {
-                        'player_client': ['android', 'visionos', 'android_vr'],
-                    }
-                }
-            }
-            with yt_dlp.YoutubeDL(opts_direct) as ydl:
-                info = ydl.extract_info(video_url, download=False)
-        except Exception as e:
-            errors.append(f"Direct clients: {str(e)}")
-            info = None
 
-        # Lượt 2 (Dự phòng cho video giới hạn tuổi/bản quyền): Dùng cookie nếu có
-        if not info and cookie_file:
+        # Lượt 1: Dùng cookie kèm visionos, android_vr, android nếu có cookie
+        if cookie_file:
             try:
                 opts_cookie = {
                     **ydl_opts,
                     'cookiefile': cookie_file,
                     'extractor_args': {
                         'youtube': {
-                            'player_client': ['tv_downgraded', 'web'],
+                            'player_client': ['visionos', 'android_vr', 'android'],
                         }
                     }
                 }
                 with yt_dlp.YoutubeDL(opts_cookie) as ydl:
                     info = ydl.extract_info(video_url, download=False)
             except Exception as e:
-                errors.append(f"Cookie fallback: {str(e)}")
+                errors.append(f"Cookie client: {str(e)}")
+                info = None
+
+        # Lượt 2: Không dùng cookie (dự phòng nếu cookie hỏng hoặc không có cookie)
+        if not info:
+            try:
+                opts_direct = {
+                    **ydl_opts,
+                    'extractor_args': {
+                        'youtube': {
+                            'player_client': ['android', 'visionos', 'android_vr'],
+                        }
+                    }
+                }
+                with yt_dlp.YoutubeDL(opts_direct) as ydl:
+                    info = ydl.extract_info(video_url, download=False)
+            except Exception as e:
+                errors.append(f"Direct client: {str(e)}")
                 info = None
 
         if not info:

@@ -92,15 +92,33 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     checkHealth();
 
-    // Paste
+    function isYouTubeUrl(url) {
+        return /(?:youtube\.com\/(?:watch\?|shorts\/|embed\/)|youtu\.be\/)/i.test(url);
+    }
+
+    // Paste & Auto-extract
     if (pasteBtn) {
         pasteBtn.addEventListener('click', async () => {
             try {
                 const text = await navigator.clipboard.readText();
-                if (text) urlInput.value = text.trim();
+                if (text) {
+                    urlInput.value = text.trim();
+                    if (isYouTubeUrl(text.trim())) {
+                        handleExtract();
+                    }
+                }
             } catch {}
         });
     }
+
+    urlInput.addEventListener('paste', () => {
+        setTimeout(() => {
+            const val = urlInput.value.trim();
+            if (isYouTubeUrl(val)) {
+                handleExtract();
+            }
+        }, 80);
+    });
 
     function formatTime(sec) {
         if (!sec || isNaN(sec)) return '00:00';
@@ -120,8 +138,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const rawUrl = urlInput.value.trim();
         if (!rawUrl) return;
 
+        const extractBtnText = document.getElementById('extract-btn-text');
         extractBtn.disabled = true;
-        extractBtn.innerText = 'Đang xử lý...';
+        if (extractBtnText) extractBtnText.innerText = 'Đang phân tích...';
+        else extractBtn.innerText = 'Đang phân tích...';
 
         try {
             const res = await fetch(`${API_URL}/api/audio?url=${encodeURIComponent(rawUrl)}`);
@@ -136,7 +156,8 @@ document.addEventListener('DOMContentLoaded', () => {
             showToast(err.message);
         } finally {
             extractBtn.disabled = false;
-            extractBtn.innerText = 'Tải Audio';
+            if (extractBtnText) extractBtnText.innerText = 'Lấy Thông Tin';
+            else extractBtn.innerText = 'Lấy Thông Tin';
         }
     }
 
@@ -183,7 +204,10 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
-        // 3. Audio Player Load
+        // 3. Dynamic Button Label Updates
+        updateDownloadButtonLabels();
+
+        // 4. Audio Player Load
         const defaultAudio = audioList[0] || item.audio;
         if (defaultAudio && defaultAudio.url) {
             audioPlayer.src = defaultAudio.url;
@@ -196,6 +220,23 @@ document.addEventListener('DOMContentLoaded', () => {
         resultCard.classList.remove('hidden');
         resultCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
+
+    function updateDownloadButtonLabels() {
+        if (!currentItem) return;
+        const selectedVideo = currentItem.videos?.[videoSelect.value] || currentItem.video;
+        if (selectedVideo) {
+            const span = downloadVideoBtn.querySelector('span');
+            if (span) span.innerText = `Tải Video (${selectedVideo.label})`;
+        }
+        const selectedAudio = currentItem.audios?.[audioSelect.value] || currentItem.audio;
+        if (selectedAudio) {
+            const span = downloadAudioBtn.querySelector('span');
+            if (span) span.innerText = `Tải Audio (${selectedAudio.format.toUpperCase()} ${selectedAudio.quality})`;
+        }
+    }
+
+    videoSelect.addEventListener('change', updateDownloadButtonLabels);
+    audioSelect.addEventListener('change', updateDownloadButtonLabels);
 
     // Helper: Get Clean Filename
     function getCleanFilename(ext) {
