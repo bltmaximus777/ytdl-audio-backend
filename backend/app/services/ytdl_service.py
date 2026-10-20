@@ -21,7 +21,7 @@ class YTDLService:
             'js_runtimes': {'node': {}, 'deno': {}, 'quickjs': {}},
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['visionos', 'android_vr', 'web'],
+                    'player_client': ['visionos', 'ios'],
                 }
             }
         }
@@ -29,6 +29,8 @@ class YTDLService:
         # Nạp cookies từ biến môi trường YOUTUBE_COOKIES hoặc file cookies.txt nếu có
         raw_cookies = os.getenv("YOUTUBE_COOKIES")
         if raw_cookies:
+            if "\\n" in raw_cookies and "\n" not in raw_cookies:
+                raw_cookies = raw_cookies.replace("\\n", "\n")
             cookie_file = os.path.join(tempfile.gettempdir(), "yt_cookies.txt")
             with open(cookie_file, "w", encoding="utf-8") as f:
                 f.write(raw_cookies)
