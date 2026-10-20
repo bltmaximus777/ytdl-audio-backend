@@ -15,8 +15,19 @@ document.addEventListener('DOMContentLoaded', () => {
     const videoTitle = document.getElementById('video-title');
     const videoUploader = document.getElementById('video-uploader');
     const videoDuration = document.getElementById('video-duration');
-    const downloadBtn = document.getElementById('download-btn');
+
+    const downloadAudioBtn = document.getElementById('download-audio-btn');
+    const downloadVideoBtn = document.getElementById('download-video-btn');
+    const audioQualityTag = document.getElementById('audio-quality-tag');
+    const videoQualityTag = document.getElementById('video-quality-tag');
     const copyUrlBtn = document.getElementById('copy-url-btn');
+
+    // Progress Elements
+    const progressContainer = document.getElementById('download-progress-container');
+    const progressPercent = document.getElementById('download-progress-percent');
+    const progressBarEl = document.getElementById('download-progress-bar');
+    const progressBytes = document.getElementById('download-progress-bytes');
+    const progressStatus = document.getElementById('download-progress-status');
 
     // Audio Player
     const audioPlayer = document.getElementById('audio-element');
@@ -38,7 +49,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const historyContainer = document.getElementById('history-list');
     const clearHistoryBtn = document.getElementById('clear-history-btn');
 
-    let currentStreamUrl = '';
+    let currentItem = null;
+    let isDownloading = false;
 
     // Sidebar Toggle Logic
     let sidebarOpen = true;
@@ -96,7 +108,13 @@ document.addEventListener('DOMContentLoaded', () => {
         return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
     }
 
-    // Extract
+    function formatBytes(bytes) {
+        if (!bytes || isNaN(bytes)) return '0 MB';
+        const mb = bytes / (1024 * 1024);
+        return `${mb.toFixed(1)} MB`;
+    }
+
+    // Extract Info
     async function handleExtract() {
         const rawUrl = urlInput.value.trim();
         if (!rawUrl) return;
@@ -126,38 +144,135 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.key === 'Enter') handleExtract();
     });
 
+    // Render Video / Audio Details
     function renderResult(item) {
-        currentStreamUrl = item.audio_stream_url;
+        currentItem = item;
+        const audioData = item.audio || { url: item.audio_stream_url, format: 'm4a', quality: '128k' };
+        const videoData = item.video;
+
         thumbImg.src = item.thumbnail || '';
-        videoTitle.innerText = item.title || 'YouTube Audio';
+        videoTitle.innerText = item.title || 'YouTube Media';
         videoUploader.innerText = item.uploader || '';
         videoDuration.innerText = formatTime(item.duration);
 
-        audioPlayer.src = currentStreamUrl;
+        // Tags
+        audioQualityTag.innerText = (audioData.format || 'm4a').toUpperCase();
+        if (videoData) {
+            videoQualityTag.innerText = `${videoData.resolution || '720p'} MP4`;
+            downloadVideoBtn.classList.remove('hidden');
+        } else {
+            downloadVideoBtn.classList.add('hidden');
+        }
+
+        // Load Audio Player
+        audioPlayer.src = audioData.url;
         audioPlayer.load();
         playIcon.classList.remove('hidden');
         pauseIcon.classList.add('hidden');
         progressBar.value = 0;
 
-        downloadBtn.onclick = () => {
-            const a = document.createElement('a');
-            a.href = currentStreamUrl;
-            a.download = `${(item.title || 'audio').replace(/[/\\?%*:|"<>]/g, '_')}.m4a`;
-            a.target = '_blank';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
+        // Clean filename
+        const safeTitle = (item.title || 'media').replace(/[/\\?%*:|"<>]/g, '_').slice(0, 80);
+
+        // Download Audio Action
+        downloadAudioBtn.onclick = () => {
+            const ext = audioData.format || 'm4a';
+            downloadWithProgress(audioData.url, `${safeTitle}.${ext}`, 'Audio');
         };
 
+        // Download Video Action
+        if (videoData) {
+            downloadVideoBtn.onclick = () => {
+                downloadWithProgress(videoData.url, `${safeTitle}.mp4`, 'Video');
+            };
+        }
+
+        // Copy Stream URL
         copyUrlBtn.onclick = async () => {
-            await navigator.clipboard.writeText(currentStreamUrl);
+            await navigator.clipboard.writeText(audioData.url);
             showToast('Đã copy stream URL!');
         };
 
         resultCard.classList.remove('hidden');
     }
 
-    // Player controls
+    // Download with live progress percentage
+    async function downloadWithProgress(streamUrl, filename, type) {
+        if (isDownloading) {
+            showToast('Đang có file đang tải, vui lòng chờ!');
+            return;
+        }
+
+        isDownloading = true;
+        progressContainer.classList.remove('hidden');
+        progressBarEl.style.width = '0%';
+        progressPercent.innerText = '0%';
+        progressStatus.innerText = `Đang tải ${type}...`;
+        progressBytes.innerText = 'Đang kết nối...';
+
+        try {
+            const proxyEndpoint = `${API_URL}/api/download?url=${encodeURIComponent(streamUrl)}&filename=${encodeURIComponent(filename)}`;
+            const response = await fetch(proxyEndpoint);
+
+            if (!response.ok) throw new Error('Không thể tải file từ máy chủ stream');
+
+            const contentLength = response.headers.get('content-length');
+            const totalBytes = contentLength ? parseInt(contentLength, 10) : 0;
+
+            const reader = response.body.getReader();
+            const chunks = [];
+            let receivedBytes = 0;
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                chunks.push(value);
+                receivedBytes += value.length;
+
+                if (totalBytes > 0) {
+                    const percent = Math.min(100, Math.round((receivedBytes / totalBytes) * 100));
+                    progressBarEl.style.width = `${percent}%`;
+                    progressPercent.innerText = `${percent}%`;
+                    progressBytes.innerText = `${formatBytes(receivedBytes)} / ${formatBytes(totalBytes)}`;
+                } else {
+                    progressBytes.innerText = `${formatBytes(receivedBytes)}`;
+                }
+            }
+
+            // Save file as Blob
+            progressBarEl.style.width = '100%';
+            progressPercent.innerText = '100%';
+            progressStatus.innerText = 'Đang lưu file vào thiết bị...';
+
+            const blob = new Blob(chunks, { type: type === 'Video' ? 'video/mp4' : 'audio/mp4' });
+            const blobUrl = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = blobUrl;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(blobUrl);
+
+            progressStatus.innerText = 'Hoàn tất tải xuống!';
+            showToast(`Tải ${type} thành công!`);
+
+            setTimeout(() => {
+                progressContainer.classList.add('hidden');
+            }, 3000);
+        } catch (err) {
+            progressStatus.innerText = 'Lỗi tải xuống';
+            showToast(err.message);
+            setTimeout(() => {
+                progressContainer.classList.add('hidden');
+            }, 3500);
+        } finally {
+            isDownloading = false;
+        }
+    }
+
+    // Audio Player Controls
     playPauseBtn.addEventListener('click', () => {
         if (audioPlayer.paused) {
             audioPlayer.play();

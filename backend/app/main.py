@@ -79,3 +79,42 @@ def get_audio(url: str = Query(..., description="URL video YouTube")):
             status_code=400,
             detail=f"Lỗi khi xử lý video: {str(e)}"
         )
+
+@app.get("/api/download")
+def proxy_download(url: str = Query(..., description="Stream URL"), filename: str = Query("media", description="Tên file khi lưu")):
+    """
+    Proxy stream từ CDN về client có đầy đủ CORS và Content-Length để theo dõi % tiến trình.
+    """
+    import urllib.request
+    from fastapi.responses import StreamingResponse
+    try:
+        req = urllib.request.Request(
+            url,
+            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+        )
+        remote_resp = urllib.request.urlopen(req, timeout=60)
+        content_len = remote_resp.headers.get("Content-Length")
+        content_type = remote_resp.headers.get("Content-Type", "application/octet-stream")
+
+        def file_iterator():
+            try:
+                while True:
+                    chunk = remote_resp.read(128 * 1024)
+                    if not chunk:
+                        break
+                    yield chunk
+            finally:
+                remote_resp.close()
+
+        headers = {
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Content-Type": content_type,
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Expose-Headers": "Content-Length, Content-Disposition"
+        }
+        if content_len:
+            headers["Content-Length"] = content_len
+
+        return StreamingResponse(file_iterator(), headers=headers)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Lỗi khi stream file: {str(e)}")

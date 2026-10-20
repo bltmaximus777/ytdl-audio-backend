@@ -43,18 +43,19 @@ class YTDLService:
             if not info:
                 raise ValueError("Không thể lấy thông tin từ đường dẫn video này.")
 
-            # Ưu tiên lấy stream url
-            audio_url = info.get('url')
-            if not audio_url and 'formats' in info:
-                # Nếu format mặc định không có url trực tiếp, duyệt danh sách format
-                audio_formats = [f for f in info['formats'] if f.get('acodec') != 'none' and f.get('vcodec') == 'none']
-                if audio_formats:
-                    # Lấy format audio chất lượng tốt nhất
-                    best_audio = max(audio_formats, key=lambda x: x.get('abr') or 0)
-                    audio_url = best_audio.get('url')
+            formats = info.get('formats', [])
 
-            if not audio_url:
-                raise ValueError("Không tìm thấy đường link stream audio trực tiếp.")
+            # 1. Audio stream tốt nhất
+            audios = [f for f in formats if f.get('acodec') != 'none' and f.get('vcodec') == 'none']
+            best_audio = max(audios, key=lambda x: x.get('abr') or 0) if audios else None
+            audio_url = best_audio.get('url') if best_audio else info.get('url')
+
+            # 2. Video stream tốt nhất (có sẵn cả hình + tiếng, thường là MP4 720p/360p)
+            prog_videos = [f for f in formats if f.get('acodec') != 'none' and f.get('vcodec') != 'none']
+            best_video = max(prog_videos, key=lambda x: x.get('height') or 0) if prog_videos else None
+
+            if not audio_url and not best_video:
+                raise ValueError("Không tìm thấy đường link stream trực tiếp.")
 
             return {
                 "id": info.get("id"),
@@ -62,7 +63,19 @@ class YTDLService:
                 "uploader": info.get("uploader"),
                 "duration": info.get("duration"),
                 "thumbnail": info.get("thumbnail"),
+                "audio": {
+                    "url": audio_url,
+                    "format": best_audio.get("ext", "m4a") if best_audio else "m4a",
+                    "filesize": best_audio.get("filesize") or best_audio.get("filesize_approx") if best_audio else None,
+                    "quality": f"{int(best_audio.get('abr') or 128)} kbps" if best_audio else "128 kbps"
+                },
+                "video": {
+                    "url": best_video.get("url") if best_video else None,
+                    "format": best_video.get("ext", "mp4") if best_video else "mp4",
+                    "resolution": f"{best_video.get('height')}p" if best_video and best_video.get('height') else "720p",
+                    "filesize": best_video.get("filesize") or best_video.get("filesize_approx") if best_video else None
+                } if best_video else None,
+                # Backward compatibility cho audio player hiện tại
                 "audio_stream_url": audio_url,
-                "format": info.get("ext", "m4a"),
-                "filesize_approx": info.get("filesize_approx") or info.get("filesize")
+                "format": best_audio.get("ext", "m4a") if best_audio else "m4a"
             }
