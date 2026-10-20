@@ -1,3 +1,5 @@
+import os
+import tempfile
 import yt_dlp
 from typing import Dict, Any
 
@@ -14,13 +16,22 @@ class YTDLService:
             'no_warnings': True,
             'extract_flat': False,
             'nocheckcertificate': True,
-            # visionos client hoạt động ổn định trên cloud không bị đòi PO-Token
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['visionos', 'mediaconnect'],
+                    'player_client': ['visionos', 'mediaconnect', 'android', 'ios'],
                 }
             },
         }
+
+        # Nạp cookies từ biến môi trường YOUTUBE_COOKIES hoặc file cookies.txt nếu có
+        raw_cookies = os.getenv("YOUTUBE_COOKIES")
+        if raw_cookies:
+            cookie_file = os.path.join(tempfile.gettempdir(), "yt_cookies.txt")
+            with open(cookie_file, "w", encoding="utf-8") as f:
+                f.write(raw_cookies)
+            ydl_opts['cookiefile'] = cookie_file
+        elif os.path.exists("cookies.txt"):
+            ydl_opts['cookiefile'] = "cookies.txt"
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(video_url, download=False)
