@@ -16,10 +16,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const videoUploader = document.getElementById('video-uploader');
     const videoDuration = document.getElementById('video-duration');
 
-    const downloadAudioBtn = document.getElementById('download-audio-btn');
+    const videoSelect = document.getElementById('video-select');
+    const audioSelect = document.getElementById('audio-select');
     const downloadVideoBtn = document.getElementById('download-video-btn');
-    const audioQualityTag = document.getElementById('audio-quality-tag');
-    const videoQualityTag = document.getElementById('video-quality-tag');
+    const downloadAudioBtn = document.getElementById('download-audio-btn');
+    const directFastBtn = document.getElementById('direct-fast-btn');
     const copyUrlBtn = document.getElementById('copy-url-btn');
 
     // Progress Elements
@@ -52,7 +53,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentItem = null;
     let isDownloading = false;
 
-    // Sidebar Toggle Logic
+    // Sidebar Toggle
     let sidebarOpen = true;
     function toggleSidebar() {
         sidebarOpen = !sidebarOpen;
@@ -126,7 +127,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const res = await fetch(`${API_URL}/api/audio?url=${encodeURIComponent(rawUrl)}`);
             const data = await res.json();
             if (!res.ok || !data.success) {
-                throw new Error(data.detail || data.error || 'Lỗi bóc tách audio');
+                throw new Error(data.detail || data.error || 'Lỗi bóc tách');
             }
 
             renderResult(data.data);
@@ -144,62 +145,128 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.key === 'Enter') handleExtract();
     });
 
-    // Render Video / Audio Details
+    // Populate Selectors and Controls
     function renderResult(item) {
         currentItem = item;
-        const audioData = item.audio || { url: item.audio_stream_url, format: 'm4a', quality: '128k' };
-        const videoData = item.video;
-
         thumbImg.src = item.thumbnail || '';
         videoTitle.innerText = item.title || 'YouTube Media';
         videoUploader.innerText = item.uploader || '';
         videoDuration.innerText = formatTime(item.duration);
 
-        // Tags
-        audioQualityTag.innerText = (audioData.format || 'm4a').toUpperCase();
-        if (videoData) {
-            videoQualityTag.innerText = `${videoData.resolution || '720p'} MP4`;
-            downloadVideoBtn.classList.remove('hidden');
+        // 1. Populate Video Select (up to 4K)
+        videoSelect.innerHTML = '';
+        const videoList = item.videos || (item.video ? [item.video] : []);
+        if (videoList.length > 0) {
+            videoList.forEach((v, idx) => {
+                const opt = document.createElement('option');
+                opt.value = idx;
+                const sizeInfo = v.filesize_mb ? ` (~${v.filesize_mb})` : '';
+                opt.innerText = `🎬 ${v.label} • ${v.format.toUpperCase()}${sizeInfo}`;
+                videoSelect.appendChild(opt);
+            });
+            downloadVideoBtn.classList.remove('opacity-50', 'pointer-events-none');
         } else {
-            downloadVideoBtn.classList.add('hidden');
+            videoSelect.innerHTML = '<option>Không có luồng video</option>';
+            downloadVideoBtn.classList.add('opacity-50', 'pointer-events-none');
         }
 
-        // Load Audio Player
-        audioPlayer.src = audioData.url;
-        audioPlayer.load();
-        playIcon.classList.remove('hidden');
-        pauseIcon.classList.add('hidden');
-        progressBar.value = 0;
-
-        // Clean filename
-        const safeTitle = (item.title || 'media').replace(/[/\\?%*:|"<>]/g, '_').slice(0, 80);
-
-        // Download Audio Action
-        downloadAudioBtn.onclick = () => {
-            const ext = audioData.format || 'm4a';
-            downloadWithProgress(audioData.url, `${safeTitle}.${ext}`, 'Audio');
-        };
-
-        // Download Video Action
-        if (videoData) {
-            downloadVideoBtn.onclick = () => {
-                downloadWithProgress(videoData.url, `${safeTitle}.mp4`, 'Video');
-            };
+        // 2. Populate Audio Select
+        audioSelect.innerHTML = '';
+        const audioList = item.audios || (item.audio ? [item.audio] : []);
+        if (audioList.length > 0) {
+            audioList.forEach((a, idx) => {
+                const opt = document.createElement('option');
+                opt.value = idx;
+                const sizeInfo = a.filesize_mb ? ` (~${a.filesize_mb})` : '';
+                opt.innerText = `🎵 ${a.label || a.format.toUpperCase()} ${sizeInfo}`;
+                audioSelect.appendChild(opt);
+            });
         }
 
-        // Copy Stream URL
-        copyUrlBtn.onclick = async () => {
-            await navigator.clipboard.writeText(audioData.url);
-            showToast('Đã copy stream URL!');
-        };
+        // 3. Audio Player Load
+        const defaultAudio = audioList[0] || item.audio;
+        if (defaultAudio && defaultAudio.url) {
+            audioPlayer.src = defaultAudio.url;
+            audioPlayer.load();
+            playIcon.classList.remove('hidden');
+            pauseIcon.classList.add('hidden');
+            progressBar.value = 0;
+        }
 
         resultCard.classList.remove('hidden');
+        resultCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
 
-    // Download with live progress percentage
-    async function downloadWithProgress(streamUrl, filename, type) {
+    // Helper: Get Clean Filename
+    function getCleanFilename(ext) {
+        const title = (currentItem?.title || 'media').replace(/[/\\?%*:|"<>]/g, '_').slice(0, 70);
+        return `${title}.${ext}`;
+    }
+
+    // Download Video with Progress
+    downloadVideoBtn.onclick = () => {
+        if (!currentItem || !currentItem.videos) return;
+        const selectedVideo = currentItem.videos[videoSelect.value] || currentItem.video;
+        if (!selectedVideo || !selectedVideo.url) {
+            showToast('Không tìm thấy link video!');
+            return;
+        }
+        const filename = getCleanFilename(selectedVideo.format || 'mp4');
+        downloadWithProgress(selectedVideo.url, filename, `Video ${selectedVideo.label}`);
+    };
+
+    // Download Audio with Progress
+    downloadAudioBtn.onclick = () => {
+        if (!currentItem) return;
+        const selectedAudio = (currentItem.audios && currentItem.audios[audioSelect.value]) || currentItem.audio;
+        if (!selectedAudio || !selectedAudio.url) {
+            showToast('Không tìm thấy link audio!');
+            return;
+        }
+        const filename = getCleanFilename(selectedAudio.format || 'm4a');
+        downloadWithProgress(selectedAudio.url, filename, `Audio`);
+    };
+
+    // Direct Max-Speed Download (Băng thông tối đa mạng người dùng từ Google CDN)
+    directFastBtn.onclick = () => {
+        if (!currentItem) return;
+        // Lấy video hoặc audio đang chọn
+        const selectedVideo = (currentItem.videos && currentItem.videos[videoSelect.value]) || currentItem.video;
+        const target = selectedVideo || currentItem.audio;
+        if (!target || !target.url) {
+            showToast('Không tìm thấy link tải!');
+            return;
+        }
+
+        const cleanName = encodeURIComponent(getCleanFilename(target.format || 'mp4'));
+        const directUrlWithTitle = target.url.includes('&title=') ? target.url : `${target.url}&title=${cleanName}`;
+
+        const a = document.createElement('a');
+        a.href = directUrlWithTitle;
+        a.target = '_blank';
+        a.download = getCleanFilename(target.format || 'mp4');
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+
+        showToast('Đang tải tốc độ tối đa từ Google CDN!');
+    };
+
+    // Copy Current Stream URL
+    copyUrlBtn.onclick = async () => {
+        if (!currentItem) return;
+        const selectedVideo = (currentItem.videos && currentItem.videos[videoSelect.value]) || currentItem.video;
+        const urlToCopy = selectedVideo?.url || currentItem.audio?.url;
+        if (urlToCopy) {
+            await navigator.clipboard.writeText(urlToCopy);
+            showToast('Đã copy stream URL!');
+        }
+    };
+
+    // Download with Live Percentage Progress
+    async function downloadWithProgress(streamUrl, filename, label) {
         if (isDownloading) {
-            showToast('Đang có file đang tải, vui lòng chờ!');
+            showToast('Đang có tiến trình tải, vui lòng chờ!');
             return;
         }
 
@@ -207,14 +274,14 @@ document.addEventListener('DOMContentLoaded', () => {
         progressContainer.classList.remove('hidden');
         progressBarEl.style.width = '0%';
         progressPercent.innerText = '0%';
-        progressStatus.innerText = `Đang tải ${type}...`;
-        progressBytes.innerText = 'Đang kết nối...';
+        progressStatus.innerText = `Đang kết nối: ${label}...`;
+        progressBytes.innerText = 'Bắt đầu luồng...';
 
         try {
             const proxyEndpoint = `${API_URL}/api/download?url=${encodeURIComponent(streamUrl)}&filename=${encodeURIComponent(filename)}`;
             const response = await fetch(proxyEndpoint);
 
-            if (!response.ok) throw new Error('Không thể tải file từ máy chủ stream');
+            if (!response.ok) throw new Error('Máy chủ không phản hồi stream');
 
             const contentLength = response.headers.get('content-length');
             const totalBytes = contentLength ? parseInt(contentLength, 10) : 0;
@@ -222,6 +289,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const reader = response.body.getReader();
             const chunks = [];
             let receivedBytes = 0;
+            let lastUpdate = Date.now();
+            let lastBytes = 0;
 
             while (true) {
                 const { done, value } = await reader.read();
@@ -230,22 +299,34 @@ document.addEventListener('DOMContentLoaded', () => {
                 chunks.push(value);
                 receivedBytes += value.length;
 
-                if (totalBytes > 0) {
-                    const percent = Math.min(100, Math.round((receivedBytes / totalBytes) * 100));
-                    progressBarEl.style.width = `${percent}%`;
-                    progressPercent.innerText = `${percent}%`;
-                    progressBytes.innerText = `${formatBytes(receivedBytes)} / ${formatBytes(totalBytes)}`;
-                } else {
-                    progressBytes.innerText = `${formatBytes(receivedBytes)}`;
+                // Cập nhật tốc độ & % mỗi 150ms
+                const now = Date.now();
+                if (now - lastUpdate > 150) {
+                    const speed = ((receivedBytes - lastBytes) / (now - lastUpdate)) * 1000; // bytes/sec
+                    const speedMb = (speed / (1024 * 1024)).toFixed(1);
+                    document.getElementById('download-progress-speed').innerText = `${speedMb} MB/s`;
+
+                    if (totalBytes > 0) {
+                        const percent = Math.min(100, Math.round((receivedBytes / totalBytes) * 100));
+                        progressBarEl.style.width = `${percent}%`;
+                        progressPercent.innerText = `${percent}%`;
+                        progressBytes.innerText = `${formatBytes(receivedBytes)} / ${formatBytes(totalBytes)}`;
+                        progressStatus.innerText = `Đang tải: ${label} (${percent}%)`;
+                    } else {
+                        progressBytes.innerText = `${formatBytes(receivedBytes)}`;
+                    }
+
+                    lastUpdate = now;
+                    lastBytes = receivedBytes;
                 }
             }
 
-            // Save file as Blob
+            // Hoàn tất lưu file
             progressBarEl.style.width = '100%';
             progressPercent.innerText = '100%';
-            progressStatus.innerText = 'Đang lưu file vào thiết bị...';
+            progressStatus.innerText = 'Lưu file vào máy...';
 
-            const blob = new Blob(chunks, { type: type === 'Video' ? 'video/mp4' : 'audio/mp4' });
+            const blob = new Blob(chunks, { type: filename.endsWith('.mp4') ? 'video/mp4' : 'audio/mp4' });
             const blobUrl = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = blobUrl;
@@ -256,7 +337,7 @@ document.addEventListener('DOMContentLoaded', () => {
             URL.revokeObjectURL(blobUrl);
 
             progressStatus.innerText = 'Hoàn tất tải xuống!';
-            showToast(`Tải ${type} thành công!`);
+            showToast(`Tải ${label} thành công!`);
 
             setTimeout(() => {
                 progressContainer.classList.add('hidden');
