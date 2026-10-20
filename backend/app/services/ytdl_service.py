@@ -14,12 +14,14 @@ class YTDLService:
             'no_warnings': True,
             'extract_flat': False,
             'nocheckcertificate': True,
-            'source_address': '0.0.0.0',
-            # Giả lập header trình duyệt để hạn chế bị YouTube chặn
+            # Sử dụng client Android / iOS để vượt qua cơ chế chặn bot web của YouTube
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android', 'ios'],
+                }
+            },
             'http_headers': {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                'Accept-Language': 'en-us,en;q=0.5',
+                'User-Agent': 'com.google.android.youtube/19.09.37 (Linux; U; Android 14; en_US) gzip',
             }
         }
 
