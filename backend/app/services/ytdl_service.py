@@ -43,31 +43,39 @@ class YTDLService:
 
         info = None
         errors = []
-        # Lượt 1: Thử trích xuất với cookie nếu có
-        if cookie_file:
-            try:
-                opts_cookie = {**ydl_opts, 'cookiefile': cookie_file}
-                with yt_dlp.YoutubeDL(opts_cookie) as ydl:
-                    info = ydl.extract_info(video_url, download=False)
-            except Exception as e:
-                errors.append(f"Attempt 1 (cookies): {str(e)}")
-                info = None
+        # Lượt 1 (Ưu tiên): Dùng client android + visionos + android_vr không cần cookie
+        # (Miễn nhiễm với bot check và không bị ảnh hưởng bởi cookie hết hạn)
+        try:
+            opts_direct = {
+                **ydl_opts,
+                'extractor_args': {
+                    'youtube': {
+                        'player_client': ['android', 'visionos', 'android_vr'],
+                    }
+                }
+            }
+            with yt_dlp.YoutubeDL(opts_direct) as ydl:
+                info = ydl.extract_info(video_url, download=False)
+        except Exception as e:
+            errors.append(f"Direct clients: {str(e)}")
+            info = None
 
-        # Lượt 2: Fallback sang client android_vr & visionos không dùng cookie (vượt triệt để bot check)
-        if not info:
+        # Lượt 2 (Dự phòng cho video giới hạn tuổi/bản quyền): Dùng cookie nếu có
+        if not info and cookie_file:
             try:
-                opts_fallback = {
+                opts_cookie = {
                     **ydl_opts,
+                    'cookiefile': cookie_file,
                     'extractor_args': {
                         'youtube': {
-                            'player_client': ['android_vr', 'visionos'],
+                            'player_client': ['tv_downgraded', 'web'],
                         }
                     }
                 }
-                with yt_dlp.YoutubeDL(opts_fallback) as ydl:
+                with yt_dlp.YoutubeDL(opts_cookie) as ydl:
                     info = ydl.extract_info(video_url, download=False)
             except Exception as e:
-                errors.append(f"Attempt 2 (no cookies): {str(e)}")
+                errors.append(f"Cookie fallback: {str(e)}")
                 info = None
 
         if not info:
