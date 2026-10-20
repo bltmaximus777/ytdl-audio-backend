@@ -16,6 +16,9 @@ class YTDLService:
             'no_warnings': True,
             'extract_flat': False,
             'nocheckcertificate': True,
+            # Bật giải mã JS challenge để vượt qua "The page needs to be reloaded"
+            'remote_components': ['ejs:github'],
+            'js_runtimes': {'node': {}, 'deno': {}, 'quickjs': {}},
         }
 
         # Nạp cookies từ biến môi trường YOUTUBE_COOKIES hoặc file cookies.txt nếu có
