@@ -55,9 +55,10 @@ def trigger_update():
 
 @app.get("/api/version")
 def check_version():
-    import yt_dlp
+    import yt_dlp, shutil
     return {
-        "yt_dlp_version": yt_dlp.version.__version__
+        "yt_dlp_version": yt_dlp.version.__version__,
+        "node_path": shutil.which("node") or shutil.which("nodejs")
     }
 
 @app.get("/api/audio")
