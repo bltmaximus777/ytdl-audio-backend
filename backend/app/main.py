@@ -60,6 +60,59 @@ def check_version():
         "yt_dlp_version": yt_dlp.version.__version__
     }
 
+@app.get("/api/debug_ytdl")
+def debug_ytdl(url: str = Query("https://youtu.be/AmmFD2OIs_k")):
+    import io, os, tempfile, yt_dlp
+    raw_cookies = os.getenv("YOUTUBE_COOKIES", "")
+    lines = raw_cookies.splitlines()
+    has_tabs = any("\t" in l for l in lines)
+    
+    log_stream = io.StringIO()
+    class Logger:
+        def debug(self, msg): log_stream.write(f"[debug] {msg}\n")
+        def info(self, msg): log_stream.write(f"[info] {msg}\n")
+        def warning(self, msg): log_stream.write(f"[warn] {msg}\n")
+        def error(self, msg): log_stream.write(f"[err] {msg}\n")
+        
+    ydl_opts = {
+        'logger': Logger(),
+        'remote_components': ['ejs:github'],
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['visionos', 'ios'],
+            }
+        }
+    }
+    cookie_file = None
+    if raw_cookies:
+        cookie_file = os.path.join(tempfile.gettempdir(), "yt_cookies.txt")
+        with open(cookie_file, "w", encoding="utf-8") as f:
+            f.write(raw_cookies)
+        ydl_opts['cookiefile'] = cookie_file
+
+    err = None
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            return {
+                "success": True,
+                "title": info.get("title"),
+                "cookie_len": len(raw_cookies),
+                "has_tabs": has_tabs,
+                "lines_count": len(lines),
+                "logs": log_stream.getvalue()
+            }
+    except Exception as e:
+        err = str(e)
+        return {
+            "success": False,
+            "error": err,
+            "cookie_len": len(raw_cookies),
+            "has_tabs": has_tabs,
+            "lines_count": len(lines),
+            "logs": log_stream.getvalue()
+        }
+
 @app.get("/api/audio")
 def get_audio(url: str = Query(..., description="URL video YouTube")):
     """
