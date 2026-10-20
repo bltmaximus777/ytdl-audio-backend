@@ -18,7 +18,7 @@ class YTDLService:
             'nocheckcertificate': True,
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['visionos', 'mediaconnect', 'android', 'ios'],
+                    'player_client': ['android_vr', 'tv_embedded', 'visionos', 'mediaconnect'],
                 }
             },
         }
