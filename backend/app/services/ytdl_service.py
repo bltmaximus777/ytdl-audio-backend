@@ -19,6 +19,11 @@ class YTDLService:
             # Bật giải mã JS challenge để vượt qua "The page needs to be reloaded"
             'remote_components': ['ejs:github'],
             'js_runtimes': {'node': {}, 'deno': {}, 'quickjs': {}},
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['visionos', 'android_vr', 'web'],
+                }
+            }
         }
 
         # Nạp cookies từ biến môi trường YOUTUBE_COOKIES hoặc file cookies.txt nếu có
@@ -30,13 +35,6 @@ class YTDLService:
             ydl_opts['cookiefile'] = cookie_file
         elif os.path.exists("cookies.txt"):
             ydl_opts['cookiefile'] = "cookies.txt"
-        else:
-            # Nếu chưa có cookie mới fallback sang client visionos/android_vr
-            ydl_opts['extractor_args'] = {
-                'youtube': {
-                    'player_client': ['android_vr', 'visionos', 'mediaconnect'],
-                }
-            }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(video_url, download=False)
@@ -45,8 +43,13 @@ class YTDLService:
 
             formats = info.get('formats', [])
 
+            def is_valid_stream(f):
+                url = f.get('url') or ''
+                proto = f.get('protocol') or ''
+                return bool(url) and not proto.startswith('m3u8') and 'manifest.googlevideo.com' not in url
+
             # 1. Danh sách Video từ 4K, 2K, 1080p, 720p, 480p, 360p
-            valid_videos = [f for f in formats if f.get('vcodec') != 'none' and f.get('url')]
+            valid_videos = [f for f in formats if is_valid_stream(f) and f.get('vcodec') != 'none']
             valid_videos.sort(key=lambda x: (x.get('height') or 0, x.get('filesize') or x.get('filesize_approx') or 0), reverse=True)
 
             videos = []
@@ -88,7 +91,7 @@ class YTDLService:
                 })
 
             # 2. Danh sách Audio
-            valid_audios = [f for f in formats if f.get('acodec') != 'none' and f.get('vcodec') == 'none' and f.get('url')]
+            valid_audios = [f for f in formats if is_valid_stream(f) and f.get('acodec') != 'none' and f.get('vcodec') == 'none']
             valid_audios.sort(key=lambda x: x.get('abr') or 0, reverse=True)
 
             audios = []
