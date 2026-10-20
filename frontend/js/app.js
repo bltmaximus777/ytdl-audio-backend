@@ -1,5 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
-    const API_URL = 'https://ytdl-audio-backend.onrender.com';
+    // Mã hoá endpoint backend, giải mã runtime
+    const _e = 'aHR0cHM6Ly95dGRsLWF1ZGlvLWJhY2tlbmQub25yZW5kZXIuY29t';
+    const API_URL = atob(_e);
 
     // Elements
     const urlInput = document.getElementById('youtube-url');
