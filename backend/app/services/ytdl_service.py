@@ -42,30 +42,36 @@ class YTDLService:
             cookie_file = "cookies.txt"
 
         info = None
+        errors = []
         # Lượt 1: Thử trích xuất với cookie nếu có
         if cookie_file:
             try:
                 opts_cookie = {**ydl_opts, 'cookiefile': cookie_file}
                 with yt_dlp.YoutubeDL(opts_cookie) as ydl:
                     info = ydl.extract_info(video_url, download=False)
-            except Exception:
+            except Exception as e:
+                errors.append(f"Attempt 1 (cookies): {str(e)}")
                 info = None
 
         # Lượt 2: Fallback sang client android_vr & visionos không dùng cookie (vượt triệt để bot check)
         if not info:
-            opts_fallback = {
-                **ydl_opts,
-                'extractor_args': {
-                    'youtube': {
-                        'player_client': ['android_vr', 'visionos'],
+            try:
+                opts_fallback = {
+                    **ydl_opts,
+                    'extractor_args': {
+                        'youtube': {
+                            'player_client': ['android_vr', 'visionos'],
+                        }
                     }
                 }
-            }
-            with yt_dlp.YoutubeDL(opts_fallback) as ydl:
-                info = ydl.extract_info(video_url, download=False)
+                with yt_dlp.YoutubeDL(opts_fallback) as ydl:
+                    info = ydl.extract_info(video_url, download=False)
+            except Exception as e:
+                errors.append(f"Attempt 2 (no cookies): {str(e)}")
+                info = None
 
         if not info:
-            raise ValueError("Không thể lấy thông tin từ đường dẫn video này.")
+            raise ValueError(f"Không thể bóc tách: {' | '.join(errors)}")
 
         formats = info.get('formats', [])
 
