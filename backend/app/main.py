@@ -61,9 +61,9 @@ def check_version():
     }
 
 @app.get("/api/debug_ytdl")
-def debug_ytdl(url: str = Query("https://youtu.be/AmmFD2OIs_k")):
+def debug_ytdl(url: str = Query("https://youtu.be/AmmFD2OIs_k"), use_cookies: bool = False, clients: str = "android_vr,visionos"):
     import io, os, tempfile, yt_dlp
-    raw_cookies = os.getenv("YOUTUBE_COOKIES", "")
+    raw_cookies = os.getenv("YOUTUBE_COOKIES", "") if use_cookies else ""
     lines = raw_cookies.splitlines()
     has_tabs = any("\t" in l for l in lines)
     
@@ -79,7 +79,7 @@ def debug_ytdl(url: str = Query("https://youtu.be/AmmFD2OIs_k")):
         'remote_components': ['ejs:github'],
         'extractor_args': {
             'youtube': {
-                'player_client': ['visionos', 'ios'],
+                'player_client': [c.strip() for c in clients.split(",") if c.strip()],
             }
         }
     }
