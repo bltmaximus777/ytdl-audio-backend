@@ -61,6 +61,58 @@ def check_version():
         "node_path": shutil.which("node") or shutil.which("nodejs")
     }
 
+@app.get("/api/debug")
+def debug_ytdl(url: str):
+    import os, tempfile, yt_dlp
+    from yt_dlp.extractor.youtube._video import INNERTUBE_CLIENTS
+    
+    logs = []
+    class Logger:
+        def debug(self, msg): logs.append(f"DEBUG: {msg}")
+        def info(self, msg): logs.append(f"INFO: {msg}")
+        def warning(self, msg): logs.append(f"WARN: {msg}")
+        def error(self, msg): logs.append(f"ERR: {msg}")
+
+    try:
+        INNERTUBE_CLIENTS['visionos']['SUPPORTS_COOKIES'] = True
+        INNERTUBE_CLIENTS['android_vr']['SUPPORTS_COOKIES'] = True
+        INNERTUBE_CLIENTS['android']['SUPPORTS_COOKIES'] = True
+    except Exception as e:
+        logs.append(f"PATCH_ERR: {e}")
+
+    raw_cookies = os.getenv("YOUTUBE_COOKIES")
+    cookie_file = None
+    if raw_cookies:
+        if "\\n" in raw_cookies and "\n" not in raw_cookies:
+            raw_cookies = raw_cookies.replace("\\n", "\n")
+        cookie_file = os.path.join(tempfile.gettempdir(), "yt_cookies.txt")
+        with open(cookie_file, "w", encoding="utf-8") as f:
+            f.write(raw_cookies)
+    elif os.path.exists("cookies.txt"):
+        cookie_file = "cookies.txt"
+
+    ydl_opts = {
+        'logger': Logger(),
+        'cookiefile': cookie_file,
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['visionos', 'android_vr', 'android'],
+            }
+        }
+    }
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            return {"status": "ok", "title": info.get("title"), "formats_count": len(info.get("formats", [])), "logs": logs}
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e),
+            "logs": logs,
+            "cookie_exists": bool(cookie_file),
+            "cookie_size": os.path.getsize(cookie_file) if cookie_file and os.path.exists(cookie_file) else 0
+        }
+
 @app.get("/api/audio")
 def get_audio(url: str = Query(..., description="URL video YouTube")):
     """
