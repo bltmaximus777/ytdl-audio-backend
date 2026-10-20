@@ -1,4 +1,5 @@
 import os
+import shutil
 import tempfile
 import yt_dlp
 from typing import Dict, Any
@@ -10,6 +11,13 @@ class YTDLService:
         Trích xuất metadata và direct audio stream URL từ YouTube.
         Không tải file về server, chỉ trích xuất link stream từ Google CDN.
         """
+        node_path = shutil.which('node') or shutil.which('nodejs')
+        js_runtimes = {'deno': {}, 'quickjs': {}}
+        if node_path:
+            js_runtimes['node'] = {'path': node_path}
+        else:
+            js_runtimes['node'] = {}
+
         ydl_opts = {
             'format': 'bestaudio/best',
             'quiet': True,
@@ -18,25 +26,29 @@ class YTDLService:
             'nocheckcertificate': True,
             # Bật giải mã JS challenge để vượt qua "The page needs to be reloaded"
             'remote_components': ['ejs:github'],
-            'js_runtimes': {'node': {}, 'deno': {}, 'quickjs': {}},
-            'extractor_args': {
-                'youtube': {
-                    'player_client': ['visionos', 'ios'],
-                }
-            }
+            'js_runtimes': js_runtimes,
         }
 
         # Nạp cookies từ biến môi trường YOUTUBE_COOKIES hoặc file cookies.txt nếu có
         raw_cookies = os.getenv("YOUTUBE_COOKIES")
+        cookie_file = None
         if raw_cookies:
             if "\\n" in raw_cookies and "\n" not in raw_cookies:
                 raw_cookies = raw_cookies.replace("\\n", "\n")
             cookie_file = os.path.join(tempfile.gettempdir(), "yt_cookies.txt")
             with open(cookie_file, "w", encoding="utf-8") as f:
                 f.write(raw_cookies)
-            ydl_opts['cookiefile'] = cookie_file
         elif os.path.exists("cookies.txt"):
-            ydl_opts['cookiefile'] = "cookies.txt"
+            cookie_file = "cookies.txt"
+
+        if cookie_file:
+            ydl_opts['cookiefile'] = cookie_file
+        else:
+            ydl_opts['extractor_args'] = {
+                'youtube': {
+                    'player_client': ['android_vr', 'visionos'],
+                }
+            }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(video_url, download=False)
