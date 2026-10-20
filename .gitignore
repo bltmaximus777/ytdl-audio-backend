@@ -33,6 +33,7 @@ wheels/
 scratch/
 temp/
 tmp/
+.wrangler/
 
 # OS metadata
 .DS_Store
