@@ -61,7 +61,7 @@ class YTDLService:
         info = None
         errors = []
 
-        # Lượt 1: Dùng cookie kèm visionos, android_vr, android nếu có cookie
+        # Lượt 1: Dùng cookie kèm default, visionos, android_vr nếu có cookie
         if cookie_file:
             try:
                 opts_cookie = {
@@ -69,7 +69,7 @@ class YTDLService:
                     'cookiefile': cookie_file,
                     'extractor_args': {
                         'youtube': {
-                            'player_client': ['visionos', 'android_vr', 'android'],
+                            'player_client': ['default', 'visionos', 'android_vr'],
                         }
                     }
                 }
