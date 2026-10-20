@@ -62,7 +62,7 @@ def check_version():
     }
 
 @app.get("/api/debug")
-def debug_ytdl(url: str):
+def debug_ytdl(url: str, use_cookies: bool = True, client: str = "visionos"):
     import os, tempfile, yt_dlp
     from yt_dlp.extractor.youtube._video import INNERTUBE_CLIENTS
     
@@ -80,26 +80,29 @@ def debug_ytdl(url: str):
     except Exception as e:
         logs.append(f"PATCH_ERR: {e}")
 
-    raw_cookies = os.getenv("YOUTUBE_COOKIES")
     cookie_file = None
-    if raw_cookies:
-        if "\\n" in raw_cookies and "\n" not in raw_cookies:
-            raw_cookies = raw_cookies.replace("\\n", "\n")
-        cookie_file = os.path.join(tempfile.gettempdir(), "yt_cookies.txt")
-        with open(cookie_file, "w", encoding="utf-8") as f:
-            f.write(raw_cookies)
-    elif os.path.exists("cookies.txt"):
-        cookie_file = "cookies.txt"
+    if use_cookies:
+        raw_cookies = os.getenv("YOUTUBE_COOKIES")
+        if raw_cookies:
+            if "\\n" in raw_cookies and "\n" not in raw_cookies:
+                raw_cookies = raw_cookies.replace("\\n", "\n")
+            cookie_file = os.path.join(tempfile.gettempdir(), "yt_cookies.txt")
+            with open(cookie_file, "w", encoding="utf-8") as f:
+                f.write(raw_cookies)
+        elif os.path.exists("cookies.txt"):
+            cookie_file = "cookies.txt"
 
+    player_clients = [c.strip() for c in client.split(',') if c.strip()]
     ydl_opts = {
         'logger': Logger(),
-        'cookiefile': cookie_file,
         'extractor_args': {
             'youtube': {
-                'player_client': ['visionos', 'android_vr', 'android'],
+                'player_client': player_clients,
             }
         }
     }
+    if cookie_file:
+        ydl_opts['cookiefile'] = cookie_file
     debug_info = {}
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -120,11 +123,14 @@ def debug_ytdl(url: str):
                 statuses = []
                 for pr in captured_prs:
                     ps = pr.get('playabilityStatus', {})
+                    sd = pr.get('streamingData') or {}
+                    fmts = sd.get('formats', []) + sd.get('adaptiveFormats', [])
                     statuses.append({
                         'status': ps.get('status'),
                         'reason': ps.get('reason'),
-                        'subreason': ps.get('messages') or ps.get('errorScreen'),
-                        'has_streamingData': 'streamingData' in pr
+                        'has_streamingData': 'streamingData' in pr,
+                        'formats_count': len(fmts),
+                        'sd_keys': list(sd.keys())
                     })
                 return {
                     "status": "error",
