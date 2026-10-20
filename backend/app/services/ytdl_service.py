@@ -11,16 +11,11 @@ class YTDLService:
         Không tải file về server, chỉ trích xuất link stream từ Google CDN.
         """
         ydl_opts = {
-            'format': 'bestaudio[ext=m4a]/bestaudio/best',
+            'format': 'bestaudio/best',
             'quiet': True,
             'no_warnings': True,
             'extract_flat': False,
             'nocheckcertificate': True,
-            'extractor_args': {
-                'youtube': {
-                    'player_client': ['android_vr', 'tv_embedded', 'visionos', 'mediaconnect'],
-                }
-            },
         }
 
         # Nạp cookies từ biến môi trường YOUTUBE_COOKIES hoặc file cookies.txt nếu có
@@ -32,6 +27,13 @@ class YTDLService:
             ydl_opts['cookiefile'] = cookie_file
         elif os.path.exists("cookies.txt"):
             ydl_opts['cookiefile'] = "cookies.txt"
+        else:
+            # Nếu chưa có cookie mới fallback sang client visionos/android_vr
+            ydl_opts['extractor_args'] = {
+                'youtube': {
+                    'player_client': ['android_vr', 'visionos', 'mediaconnect'],
+                }
+            }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(video_url, download=False)
