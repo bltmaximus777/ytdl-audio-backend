@@ -100,18 +100,40 @@ def debug_ytdl(url: str):
             }
         }
     }
+    debug_info = {}
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-            return {"status": "ok", "title": info.get("title"), "formats_count": len(info.get("formats", [])), "logs": logs}
-    except Exception as e:
-        return {
-            "status": "error",
-            "error": str(e),
-            "logs": logs,
-            "cookie_exists": bool(cookie_file),
-            "cookie_size": os.path.getsize(cookie_file) if cookie_file and os.path.exists(cookie_file) else 0
-        }
+            ie = ydl.get_info_extractor('Youtube')
+            # Hook into _extract_player_responses
+            orig_extract_prs = ie._extract_player_responses
+            captured_prs = []
+            def patched_extract_prs(*args, **kwargs):
+                res = orig_extract_prs(*args, **kwargs)
+                captured_prs.extend(res[0] if isinstance(res, tuple) else res)
+                return res
+            ie._extract_player_responses = patched_extract_prs
+
+            try:
+                info = ydl.extract_info(url, download=False)
+                return {"status": "ok", "title": info.get("title"), "formats_count": len(info.get("formats", []))}
+            except Exception as e:
+                statuses = []
+                for pr in captured_prs:
+                    ps = pr.get('playabilityStatus', {})
+                    statuses.append({
+                        'status': ps.get('status'),
+                        'reason': ps.get('reason'),
+                        'subreason': ps.get('messages') or ps.get('errorScreen'),
+                        'has_streamingData': 'streamingData' in pr
+                    })
+                return {
+                    "status": "error",
+                    "error": str(e),
+                    "playability_statuses": statuses,
+                    "logs": logs
+                }
+    except Exception as outer_e:
+        return {"status": "crash", "error": str(outer_e), "logs": logs}
 
 @app.get("/api/audio")
 def get_audio(url: str = Query(..., description="URL video YouTube")):
