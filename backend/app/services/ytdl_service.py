@@ -14,15 +14,12 @@ class YTDLService:
             'no_warnings': True,
             'extract_flat': False,
             'nocheckcertificate': True,
-            # Sử dụng client Android / iOS để vượt qua cơ chế chặn bot web của YouTube
+            # visionos client hoạt động ổn định trên cloud không bị đòi PO-Token
             'extractor_args': {
                 'youtube': {
-                    'player_client': ['android', 'ios'],
+                    'player_client': ['visionos', 'mediaconnect'],
                 }
             },
-            'http_headers': {
-                'User-Agent': 'com.google.android.youtube/19.09.37 (Linux; U; Android 14; en_US) gzip',
-            }
         }
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:

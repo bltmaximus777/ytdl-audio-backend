@@ -28,6 +28,13 @@ def health_check():
         "version": "1.0.0"
     }
 
+@app.get("/api/version")
+def check_version():
+    import yt_dlp
+    return {
+        "yt_dlp_version": yt_dlp.version.__version__
+    }
+
 @app.get("/api/audio")
 def get_audio(url: str = Query(..., description="URL video YouTube")):
     """
